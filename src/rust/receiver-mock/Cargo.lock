@@ -1397,6 +1397,7 @@ dependencies = [
  "chrono",
  "clap",
  "http",
+ "itertools",
  "json_str",
  "opentelemetry-proto",
  "prometheus-parse",
