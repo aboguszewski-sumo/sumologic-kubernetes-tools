@@ -6,6 +6,7 @@ use crate::metadata::Metadata;
 use crate::metrics::MetricsHandleResult;
 use crate::options;
 use crate::router::*;
+use crate::traces::Span;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use log::debug;
 use log::warn;
@@ -139,7 +140,6 @@ pub async fn handler_receiver_otlp_metrics(
             let mut samples = vec![];
             for resource_metrics in metrics_data.resource_metrics {
                 if resource_metrics.resource.is_none() {
-                    // TODO: Replace printing with logging
                     warn!("resource is none for resource metrics");
                     continue;
                 }
@@ -202,6 +202,10 @@ pub async fn handler_receiver_otlp_traces(
             };
 
             for resource_spans in traces_data.resource_spans {
+                if resource_spans.resource.is_none() {
+                    warn!("resource is none for resource spans");
+                    continue;
+                }
                 for instrumentation_lib_spans in resource_spans.instrumentation_library_spans {
                     for span in instrumentation_lib_spans.spans {
                         // TODO: Add pretty printing
@@ -219,6 +223,24 @@ pub async fn handler_receiver_otlp_traces(
     }
 
     HttpResponse::Ok().body("")
+}
+
+ // TODO: Move this to Sample module and rename that module. 
+ pub fn otlp_span_to_span(otlp_span: &tracev1::Span, resource_attrs: &[commonv1::KeyValue]) -> Span {
+    let parent_id = if otlp_span.parent_span_id.is_empty() {
+        None
+    } else {
+        Some(otlp_span.parent_span_id.clone())
+    };
+    let attributes = sample::tags_to_map(&otlp_span.attributes, resource_attrs);
+
+    Span { 
+        name: otlp_span.name.clone(), 
+        id: otlp_span.span_id.clone(),
+        trace_id: otlp_span.trace_id.clone(), 
+        parent_span_id: parent_id, 
+        attributes,
+    }
 }
 
 mod sample {
@@ -293,7 +315,7 @@ mod sample {
         }
     }
 
-    fn tags_to_map(attrs: &Attributes, labels: &Attributes) -> HashMap<String, String> {
+    pub fn tags_to_map(attrs: &Attributes, labels: &Attributes) -> HashMap<String, String> {
         attrs
             .iter()
             .chain(labels.iter())
